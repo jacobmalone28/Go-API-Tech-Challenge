@@ -21,7 +21,7 @@ func SetupRoutes(db *sql.DB) (http.Handler) {
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Mount("/course", courseRoutes(db));
-		// r.Mount("/person", personRoutes(db));
+		r.Mount("/person", personRoutes(db));
 	})
 
 	return r
@@ -34,23 +34,21 @@ func courseRoutes(db *sql.DB) http.Handler {
 	r.Get("/", handlers.HandleGetAllCourses(db))
 	r.Get("/{id}", handlers.HandleGetCourseByID(db))
 	r.Put("/{id}", handlers.HandleUpdateCourse(db))
-	// r.Post("/", createCourse)
-	// r.Delete("/{id}", deleteCourseByID)
+	r.Post("/", handlers.HandleCreateCourse(db))
+	r.Delete("/{id}", handlers.HandleDeleteCourse(db))
 
 	return r
 }
 
 // personRoutes defines the routes for the /api/person endpoint.
-// func personRoutes() http.Handler {
-// 	r := chi.NewRouter()
+func personRoutes(db *sql.DB) http.Handler {
+	r := chi.NewRouter()
 
-// 	r.Get("/", getAllPersons) // Note: This route will handle query parameters
-// 	r.Get("/{name}", getPersonByName)
-// 	r.Put("/{name}", updatePersonByName)
-// 	r.Post("/", createPerson)
-// 	r.Delete("/{name}", deletePersonByName)
+	r.Get("/", handlers.HandleGetAllPeople(db))
+	r.Get("/{name}", handlers.HandleGetPersonByName(db))
+	r.Put("/{name}", handlers.HandleUpdatePersonByName(db))
+	r.Post("/", handlers.HandleCreatePerson(db))
+	r.Delete("/{name}", handlers.HandleDeletePersonByName(db))
 
-// 	return r
-// }
-
-// ... Implement your handler functions for each route here (getAllCourses, getCourseByID, etc.)
+	return r
+}

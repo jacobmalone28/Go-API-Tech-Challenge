@@ -1,0 +1,32 @@
+package services
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+)
+
+// AddPersonToCourse adds a person to multiple courses, handling potential errors for individual courses.
+func AddPersonToCourse(db *sql.DB, personID int, courseIDs []int) error {
+    ctx := context.Background()
+    var errors []error
+
+    for _, id := range courseIDs {
+        _, err := db.ExecContext(
+            ctx,
+            `INSERT INTO person_course (person_id, course_id) VALUES ($1, $2)`,
+            personID, id,
+        )
+        if err != nil {
+            // Collect errors instead of just continuing
+            errors = append(errors, fmt.Errorf("failed to add course %d: %w", id, err))
+        }
+    }
+
+    // If there were any errors, return them combined
+    if len(errors) > 0 {
+        return fmt.Errorf("failed to add some courses: %v", errors)
+    }
+
+    return nil
+}
