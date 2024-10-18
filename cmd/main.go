@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"time"
@@ -25,7 +26,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	// connect to database
-	db, err := database.Connect(cfg)
+	db, err := database.Connect(cfg, sql.Open)
 
 	if err != nil {
 		return err

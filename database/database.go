@@ -9,14 +9,17 @@ import (
 	"github.com/jacob-tech-challenge/config"
 )
 
-// Connect connects to the database
-func Connect(cfg config.Config) (*sql.DB, error) {
+// OpenDBFunc is a function type that matches the signature of sql.Open
+type OpenDBFunc func(driverName, dataSourceName string) (*sql.DB, error)
+
+// Connect connects to the database using the provided OpenDBFunc
+func Connect(cfg config.Config, openDB OpenDBFunc) (*sql.DB, error) {
 	// create the data source name
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DB_Host, cfg.DB_Port, cfg.DB_User, cfg.DB_Password, cfg.DB_Name)
 
-	// connect to the database
-	db, err := sql.Open("postgres", dsn)
+	// connect to the database using the provided OpenDBFunc
+	db, err := openDB("postgres", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +29,7 @@ func Connect(cfg config.Config) (*sql.DB, error) {
 	}
 
 	// check if the database is alive (by pinging it)
-	if err :=db.Ping(); err != nil {
+	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 

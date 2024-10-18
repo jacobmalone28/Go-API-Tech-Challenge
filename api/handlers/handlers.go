@@ -207,78 +207,115 @@ func HandleGetPersonByName(db *sql.DB) http.HandlerFunc {
 func HandleUpdatePersonByName(db *sql.DB) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := chi.URLParam(r, "name")
-		var person models.Person
-		if err := json.NewDecoder(r.Body).Decode(&person); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		personOut, err := services.UpdatePersonByName(db, name, person)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if name == "" {
+			http.Error(w, "name parameter is required", http.StatusBadRequest)
 			return
 		}
 
-		// add person to courses
+		var person models.Person
+		if err := json.NewDecoder(r.Body).Decode(&person); err != nil {
+			http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Check if person exists first
+		var existingPerson models.Person
+		err := db.QueryRow("SELECT id, first_name, last_name, type, age FROM person WHERE first_name = $1", name).
+			Scan(&existingPerson.ID, &existingPerson.FirstName, &existingPerson.LastName, &existingPerson.Type, &existingPerson.Age)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Person not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Update person
+		_, err = db.Exec(`
+			UPDATE person 
+			SET first_name = $1, last_name = $2, type = $3, age = $4 
+			WHERE first_name = $5`,
+			person.FirstName, person.LastName, person.Type, person.Age, name)
+		if err != nil {
+			http.Error(w, "Failed to update person: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Handle courses
 		if len(person.Courses) > 0 {
-			if err := services.AddPersonToCourse(db, personOut.ID, person.Courses); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+			for _, courseID := range person.Courses {
+				_, err = db.Exec(`
+					INSERT INTO person_course (person_id, course_id) 
+					VALUES ($1, $2)
+					ON CONFLICT (person_id, course_id) DO NOTHING`,
+					existingPerson.ID, courseID)
+				if err != nil {
+					http.Error(w, "Failed to update courses: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
 			}
 		}
 
-
-
+		// Prepare response
+		person.ID = existingPerson.ID // Make sure we include the correct ID
 		personOutMap := map[string]interface{}{
-			"id":        person.ID,
+			"id":        float64(person.ID),
 			"firstName": person.FirstName,
 			"lastName":  person.LastName,
 			"type":      person.Type,
-			"age":       person.Age,
+			"age":       float64(person.Age),
 			"courses":   person.Courses,
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(personOutMap); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error encoding response: %v", err)
 		}
 	})
 }
 
 func HandleCreatePerson(db *sql.DB) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		var person models.Person
 		if err := json.NewDecoder(r.Body).Decode(&person); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 			return
 		}
+
+		// Validate person
+		if person.FirstName == "" || person.LastName == "" {
+			http.Error(w, "FirstName and LastName are required", http.StatusBadRequest)
+			return
+		}
+
+		// Create person
 		personOut, err := services.CreatePerson(db, person)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error creating person: %v", err) // Add logging
+			http.Error(w, "Failed to create person: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// add person to courses
-		if len(person.Courses) > 0 {
-			if err := services.AddPersonToCourse(db, personOut.ID, person.Courses); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
+		// Update personOut with the courses from the input
+		personOut.Courses = person.Courses
 
 		personOutMap := map[string]interface{}{
-			"id":        person.ID,
-			"firstName": person.FirstName,
-			"lastName":  person.LastName,
-			"type":      person.Type,
-			"age":       person.Age,
-			"courses":   person.Courses,
+			"id":        personOut.ID,
+			"firstName": personOut.FirstName,
+			"lastName":  personOut.LastName,
+			"type":      personOut.Type,
+			"age":       personOut.Age,
+			"courses":   personOut.Courses,
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(personOutMap); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error encoding response: %v", err)
 		}
-	})
+	}
 }
 
 func HandleDeletePersonByName(db *sql.DB) http.HandlerFunc {
@@ -293,4 +330,5 @@ func HandleDeletePersonByName(db *sql.DB) http.HandlerFunc {
 		w.Write([]byte(`{"message": "Person deleted"}`))
 	})
 }
+
 

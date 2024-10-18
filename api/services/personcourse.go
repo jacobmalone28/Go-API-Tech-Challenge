@@ -12,7 +12,25 @@ func AddPersonToCourse(db *sql.DB, personID int, courseIDs []int) error {
     var errors []error
 
     for _, id := range courseIDs {
-        _, err := db.ExecContext(
+		// make sure the course exists
+		var courseID int
+		err := db.QueryRowContext(ctx, `SELECT id FROM course WHERE id = $1`, id).Scan(&courseID)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to add course %d: course not found", id))
+			continue
+		}
+
+		// make sure the person exists
+		var personID int
+		err = db.QueryRowContext(ctx, `SELECT id FROM person WHERE id = $1`, personID).Scan(&personID)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("failed to add course %d: person not found", id))
+			continue
+		}
+
+
+
+        _, err = db.ExecContext(
             ctx,
             `INSERT INTO person_course (person_id, course_id) VALUES ($1, $2)`,
             personID, id,
